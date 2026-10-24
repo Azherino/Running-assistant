@@ -266,3 +266,5 @@ stores plans and runs in SQLite, and renders the result.
 
 This is a training tool, not medical advice. If pain changes how you run, stop and
 see a physiotherapist or doctor.
+#   R u n n i n g - a s s i s t a n t  
+ 
