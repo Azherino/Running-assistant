@@ -40,10 +40,29 @@ function text(value: unknown): string | undefined {
 }
 
 function heartRate(node: unknown): number | undefined {
-  const wrapper = asArray(node)[0];
-  if (wrapper == null || typeof wrapper !== 'object') return undefined;
-  const value = (wrapper as XmlNode).Value;
-  return num(Array.isArray(value) ? value[0] : value);
+  if (node == null) return undefined;
+
+  // Case 1: Node is already a number (some parsers do this)
+  if (typeof node === 'number') return Number.isFinite(node) ? node : undefined;
+
+  // Case 2: Node is a wrapper object
+  if (typeof node === 'object') {
+    // Standard TCX often wraps values in a 'Value' property
+    // e.g., <AverageHeartRateBpm><Value>140</Value></AverageHeartRateBpm>
+    const nodeAsObj = node as XmlNode;
+    const value = nodeAsObj.Value;
+    if (value != null) {
+      const parsed = num(Array.isArray(value) ? value[0] : value);
+      if (parsed != null) return parsed;
+    }
+
+    // Case 3: Node itself contains the value (simplified TCX)
+    // e.g., <AverageHeartRateBpm>140</AverageHeartRateBpm>
+    const directValue = num(node);
+    if (directValue != null) return directValue;
+  }
+
+  return undefined;
 }
 
 interface TrackpointSummary {
@@ -81,7 +100,9 @@ function summarizeTrackpoints(laps: XmlNode[]): TrackpointSummary {
 
 function parseActivity(activity: XmlNode, warnings: string[]): ImportedActivity | null {
   const laps = asArray(activity.Lap as XmlNode[] | undefined);
-  const sport = attr(activity, '@_Sport');
+  
+  // Handle case where activity might be wrapped or have different property names
+  const sport = attr(activity, '@_Sport') ?? (activity as any).Sport;
   const sportInfo = workoutTypeForSport(sport);
 
   let distanceM = 0;
@@ -90,7 +111,8 @@ function parseActivity(activity: XmlNode, warnings: string[]): ImportedActivity 
   let hrWeight = 0;
 
   for (const lap of laps) {
-    distanceM += num(lap.DistanceMeters) ?? 0;
+    const lapDist = num(lap.DistanceMeters);
+    distanceM += lapDist ?? 0;
 
     const lapTime = num(lap.TotalTimeSeconds) ?? 0;
     durationS += lapTime;
@@ -170,7 +192,18 @@ export function parseTcx(xml: string): ParseOutcome {
   }
 
   const root = (document?.TrainingCenterDatabase ?? document) as XmlNode | undefined;
-  const activitiesNode = root?.Activities as XmlNode | undefined;
+  
+  // Try to find Activities node regardless of root structure
+  let activitiesNode = root?.Activities as XmlNode | undefined;
+  if (activitiesNode == null && root != null) {
+    // Some TCX files might have Activities directly under the root or nested differently
+    const keys = Object.keys(root);
+    const actKey = keys.find(k => k.toLowerCase() === 'activities');
+    if (actKey) {
+      activitiesNode = root[actKey] as XmlNode | undefined;
+    }
+  }
+
   if (activitiesNode == null) {
     throw new Error('No activities found. This looks like a TCX course, not an activity file.');
   }

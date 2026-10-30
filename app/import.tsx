@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
-import { File } from 'expo-file-system';
+import * as FileSystem from 'expo-file-system';
+import * as LegacyFS from 'expo-file-system/legacy';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -40,10 +41,13 @@ export default function ImportScreen() {
     try {
       const picked = await DocumentPicker.getDocumentAsync({
         type: '*/*',
-        copyToCacheDirectory: true,
+        copyToCacheDirectory: false,
         multiple: false,
       });
-      if (picked.canceled || picked.assets.length === 0) return;
+      if (picked.canceled || picked.assets.length === 0) {
+        setBusy(false);
+        return;
+      }
 
       setError(null);
       setWarnings([]);
@@ -53,14 +57,35 @@ export default function ImportScreen() {
       const asset = picked.assets[0];
       setFileName(asset.name);
 
-      const file = new File(asset.uri);
       let outcome: ParseOutcome;
-      if (asset.name.toLowerCase().endsWith('.fit')) {
-        const buffer = await file.arrayBuffer();
-        outcome = parseActivityFile({ name: asset.name, bytes: new Uint8Array(buffer) });
-      } else {
-        const text = await file.text();
-        outcome = parseActivityFile({ name: asset.name, text });
+      const nameLower = asset.name.toLowerCase();
+
+      try {
+        const LegacyFS = require('expo-file-system/legacy');
+        
+        // Use the URI provided by DocumentPicker directly.
+        // In some Expo versions, copyToCacheDirectory: true already puts the file in a readable place.
+        // Let's try reading directly but using LegacyFS to avoid the deprecation throw.
+        
+        if (nameLower.endsWith('.fit')) {
+          const base64 = await LegacyFS.readAsStringAsync(asset.uri, {
+            encoding: LegacyFS.EncodingType.Base64,
+          });
+          const binary = typeof atob === 'function' ? atob(base64) : Buffer.from(base64, 'base64').toString('binary');
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i += 1) {
+            bytes[i] = binary.charCodeAt(i);
+          }
+          outcome = parseActivityFile({ name: asset.name, bytes });
+        } else {
+          const text = await LegacyFS.readAsStringAsync(asset.uri, {
+            encoding: LegacyFS.EncodingType.UTF8,
+          });
+          outcome = parseActivityFile({ name: asset.name, text });
+        }
+      } catch (fsError: any) {
+        console.error('FileSystem Final Attempt Error:', fsError);
+        throw new Error(`Could not read file: ${fsError.message || 'Unable to open file'}`);
       }
 
       setActivities(outcome.activities);

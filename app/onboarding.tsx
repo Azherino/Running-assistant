@@ -67,6 +67,13 @@ export default function OnboardingScreen() {
   );
   const [longDay, setLongDay] = useState<6 | 7>(existing?.profile.preferredLongDay ?? 7);
   const [experienced, setExperienced] = useState(existing?.profile.experienced ?? false);
+  const [age, setAge] = useState(existing?.profile.age != null ? String(existing.profile.age) : '');
+  const [maxHr, setMaxHr] = useState(
+    existing?.profile.maxHr != null ? String(existing.profile.maxHr) : '',
+  );
+  const [restingHr, setRestingHr] = useState(
+    existing?.profile.restingHr != null ? String(existing.profile.restingHr) : '',
+  );
   const [painNote, setPainNote] = useState(existing?.profile.injuryFlags?.[0] ?? '');
   const [goalType, setGoalType] = useState<'race' | 'fitness'>(existing?.goal.type ?? 'race');
   const [goalDistance, setGoalDistance] = useState<RaceDistance>(
@@ -136,6 +143,34 @@ export default function OnboardingScreen() {
       }
     }
 
+    const parsedAge = age.trim().length === 0 ? undefined : parseNumber(age);
+    if (age.trim().length > 0 && (parsedAge == null || parsedAge < 10 || parsedAge > 100)) {
+      setError('Age should be between 10 and 100.');
+      setBusy(false);
+      return;
+    }
+    const parsedMaxHr = maxHr.trim().length === 0 ? undefined : parseNumber(maxHr);
+    if (maxHr.trim().length > 0 && (parsedMaxHr == null || parsedMaxHr < 100 || parsedMaxHr > 230)) {
+      setError('Max HR should be between 100 and 230 bpm.');
+      setBusy(false);
+      return;
+    }
+    const parsedRestingHr = restingHr.trim().length === 0 ? undefined : parseNumber(restingHr);
+    if (restingHr.trim().length > 0 && (parsedRestingHr == null || parsedRestingHr < 30 || parsedRestingHr > 120)) {
+      setError('Resting HR should be between 30 and 120 bpm.');
+      setBusy(false);
+      return;
+    }
+    if (
+      parsedMaxHr != null &&
+      parsedRestingHr != null &&
+      parsedRestingHr >= parsedMaxHr
+    ) {
+      setError('Resting HR must be less than Max HR.');
+      setBusy(false);
+      return;
+    }
+
     setBusy(true);
     try {
       await completeOnboarding({
@@ -145,6 +180,9 @@ export default function OnboardingScreen() {
         daysPerWeek,
         preferredLongDay: longDay,
         experienced,
+        age: parsedAge == null ? undefined : Math.round(parsedAge),
+        maxHr: parsedMaxHr == null ? undefined : Math.round(parsedMaxHr),
+        restingHr: parsedRestingHr == null ? undefined : Math.round(parsedRestingHr),
         goal:
           goalType === 'race'
             ? {
@@ -253,6 +291,38 @@ export default function OnboardingScreen() {
               onPress={() => setExperienced(true)}
             />
           </View>
+        </Field>
+
+        <View style={styles.twoUp}>
+          <View style={styles.twoUpItem}>
+            <Field label="Age" hint="optional">
+              <Input
+                value={age}
+                onChangeText={setAge}
+                keyboardType="number-pad"
+                placeholder="35"
+              />
+            </Field>
+          </View>
+          <View style={styles.twoUpItem}>
+            <Field label="Max HR" hint="optional, bpm">
+              <Input
+                value={maxHr}
+                onChangeText={setMaxHr}
+                keyboardType="number-pad"
+                placeholder="185"
+              />
+            </Field>
+          </View>
+        </View>
+
+        <Field label="Resting HR" hint="optional, bpm (uses Karvonen zones if set)">
+          <Input
+            value={restingHr}
+            onChangeText={setRestingHr}
+            keyboardType="number-pad"
+            placeholder="55"
+          />
         </Field>
 
         <Field label="Injury note" hint="Optional. Any niggle caps the weekly ramp at 5%.">

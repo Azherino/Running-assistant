@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { buildWeekReview, weekForDate } from '../../src/engine/adapt/review';
 import { reviewWeek } from '../../src/engine/adapt/rules';
 import { diffDays } from '../../src/engine/dates';
+import { buildHrModel, easyHrCeiling, estimateMaxHr } from '../../src/engine/hr';
 import { RACE_DISTANCE_LABELS } from '../../src/engine/paces';
 import type { AdjustmentAction } from '../../src/engine/types';
 import { Button, Card, Chip, PageHeader, PhaseBadge, Screen, SectionTitle } from '../../src/ui/components/ui';
@@ -57,7 +58,21 @@ export default function TodayScreen() {
     diffDays(plan.endDate, today) > 0 || (daysToRace != null && daysToRace < 0);
   const week = weekForDate(plan.weeks, today) ?? plan.weeks[plan.weeks.length - 1];
   const workout = week?.workouts.find((candidate) => candidate.date === today);
-  const review = week ? buildWeekReview(week, engineRuns) : null;
+
+  const hrModel = useMemo(() => {
+    const profile = data.profile;
+    if (profile.maxHr != null && profile.maxHr >= 100) {
+      return buildHrModel(profile.maxHr, profile.restingHr);
+    }
+    if (profile.age != null) {
+      return buildHrModel(estimateMaxHr(profile.age), profile.restingHr);
+    }
+    return null;
+  }, [data.profile]);
+  const easyHrCeilingValue = hrModel ? easyHrCeiling(hrModel) : undefined;
+  const reviewOptions = { easyHrCeiling: easyHrCeilingValue };
+
+  const review = week ? buildWeekReview(week, engineRuns, reviewOptions) : null;
 
   const upcoming = plan.weeks
     .flatMap((candidate) => candidate.workouts)
@@ -71,7 +86,7 @@ export default function TodayScreen() {
   const currentWeekIndex = week?.index ?? -1;
   const lastWeek = currentWeekIndex > 0 ? plan.weeks[currentWeekIndex - 1] : null;
   const lastReview = lastWeek
-    ? buildWeekReview(lastWeek, engineRuns, { injuryFlag: painFlag })
+    ? buildWeekReview(lastWeek, engineRuns, { injuryFlag: painFlag, easyHrCeiling: easyHrCeilingValue })
     : null;
   const adjustment = lastReview ? reviewWeek(lastReview) : null;
   const applied = lastWeek

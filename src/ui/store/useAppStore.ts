@@ -37,6 +37,9 @@ export interface OnboardingInput {
   daysPerWeek: 3 | 4 | 5 | 6;
   preferredLongDay: 6 | 7;
   experienced: boolean;
+  age?: number;
+  maxHr?: number;
+  restingHr?: number;
   goal: {
     type: 'race' | 'fitness';
     distanceKm?: RaceDistance;
@@ -76,6 +79,9 @@ function buildState(input: OnboardingInput): StoredAppState {
     daysPerWeek: input.daysPerWeek,
     preferredLongDay: input.preferredLongDay,
     experienced: input.experienced,
+    age: input.age,
+    maxHr: input.maxHr,
+    restingHr: input.restingHr,
     injuryFlags: input.painNote ? [input.painNote] : undefined,
   };
 
